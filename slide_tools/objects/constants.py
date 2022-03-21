@@ -19,7 +19,7 @@ class LabelInterpolation(Enum):
 
 class LabelField(Enum):
     POINTS = "points"
-    LABELS = "labels"
+    VALUES = "values"
 
 
 class BalanceMode(Enum):

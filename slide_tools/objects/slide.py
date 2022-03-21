@@ -31,12 +31,13 @@ class Slide:
         microns_per_pixel (float): native/highest WSI resolution
         native_sizes (sequence): native tile sizes for all levels (level=0 is highest resolution)
         regions (np.array): array of coordinates and size per region ((x, y, w, h), ...)
-        labels (dict): Dictionary of labels for all regions {"tumor": [0,0,1,...], "normal": [1,1,0,...]}
+        labels (dict): Dictionary of labels for all regions e.g. {"tumor": [0,0,1,...], "normal": [1,1,0,...]}
     """
 
     annotations: Optional[Sequence[Annotation]] = None
     image: Optional[cucim.CuImage] = None
-    label_func: Optional[Callable] = None
+    local_label_func: Optional[Callable] = None
+    global_label_func: Optional[Callable] = None
     properties: Optional[dict] = None
     microns_per_pixel: Optional[float] = None
     native_sizes: Optional[Sequence[int]] = None
@@ -99,7 +100,7 @@ class Slide:
         def global_label_func(x, y):
             return {k: labels[k][None, ...].repeat(len(x), axis=0) for k in labels}
 
-        self.label_func = global_label_func
+        self.global_label_func = global_label_func
 
     def load_label_from_json(
         self,
@@ -140,16 +141,36 @@ class Slide:
         label_funcs = {}
 
         for key in load_keys:
-            points = np.asarray(labels[key][LabelField.POINTS])
-            labels = np.asarray(labels[key][LabelField.LABELS])
+            points = np.asarray(labels[key][LabelField.POINTS.value])
+            values = np.asarray(labels[key][LabelField.VALUES.value])
 
-            assert len(points) == len(labels)
-            label_funcs[key] = func(points, labels)
+            assert len(points) == len(values)
+            label_funcs[key] = func(points, values)
 
-        def label_func(x, y):
+        def local_label_func(x, y):
             return {k: label_funcs[k](x, y) for k in label_funcs}
 
-        self.label_func = label_func
+        self.local_label_func = local_label_func
+        
+    def get_labels(self, x: int, y: int):
+        """
+        Get global and local labels at (x, y).
+        
+        Args:
+            x (int): x-coordinate in pixels at level 0
+            y (int): y-coordinate in pixels at level 0
+            
+        Returns:
+            labels (dict): e.g. {"tumor": [1,1,0, ...], ...}
+        """
+        if (self.local_label_func is None) and (self.global_label_func is None):
+            raise RuntimeError("No labels loaded!")
+        labels = {}
+        if self.local_label_func is not None:
+            labels.update(self.local_label_func(x, y))
+        if self.global_label_func is not None:
+            labels.update(self.global_label_func(x, y))
+        return labels
 
     def setup_regions(
         self,
@@ -216,9 +237,8 @@ class Slide:
 
         if centroid_in_annotation:
             grid = grid + 0.5  # +0.5 for centroid of tiles
-            x_idx, y_idx = grid.T.round().astype(
-                int
-            )  # Round float coordinates to nearest grid idx
+            # Round float coordinates to nearest grid idx
+            x_idx, y_idx = grid.T.round().astype(int)  
 
             # Create binary mask of tiles overlapping the annotation
             mask = rio_rasterize(
@@ -229,17 +249,18 @@ class Slide:
 
         # Rescale to pixel coordinates
         regions = (size * grid).round().astype(int)
-
+        
+        labels = None
         if with_labels or (filter_by_label_func is not None):
-            assert self.label_func is not None
             x, y = (regions + size / 2).T
-            labels = self.label_func(x, y)
+            labels = self.get_labels(x, y)
             if filter_by_label_func is not None:
                 filter_mask = filter_by_label_func(labels)
                 regions = regions[filter_mask]
-                labels = {k: labels[k][filter_mask] for k in labels}
-        else:
-            labels = None
+                if with_labels:
+                    labels = {k: labels[k][filter_mask] for k in labels}
+                else:
+                    labels = None
 
         sizes = np.broadcast_to(size, (len(regions), 2))
         self.regions = np.concatenate([regions, sizes], axis=1)

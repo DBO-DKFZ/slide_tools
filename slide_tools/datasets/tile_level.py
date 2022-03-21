@@ -1,5 +1,6 @@
 import random
 from functools import partial
+from tqdm import tqdm
 from typing import Callable, Optional, Sequence, Union
 
 import numpy as np
@@ -19,6 +20,8 @@ class TileLevelDataset(Dataset):
         global_labels: Optional[Sequence] = None,
         img_tfms: Optional[Callable] = None,
         label_tfms: Optional[Callable] = None,
+        return_labels: Optional[Union[Sequence[str], str]] = None,
+        verbose: bool = False,
         **kwargs
     ):
         """
@@ -27,7 +30,7 @@ class TileLevelDataset(Dataset):
         The idea is to call .setup_epoch(...) at the beginning of every epoch to sample
         new tiles from the pool of available WSI. This will populate .samples which
         are just indices ((slide_idx, region_idx), ...). Balancing by slide size and tile labels
-        are supported. Shuffling is also handled inside this dataset (so you should disbale it
+        is supported. Shuffling is also handled inside this dataset (so you should disbale it
         in your DataLoader)and can be done in chunks such that a worker is more likely to read
         a few (neighboring) tiles from the same slide which should lead to some speed up.
 
@@ -46,11 +49,11 @@ class TileLevelDataset(Dataset):
             assert len(slide_paths) == len(annotation_paths)
         if label_paths is not None:
             assert len(slide_paths) == len(annotation_paths)
-        if (label_paths is not None) and (global_labels is not None):
-            raise RuntimeError("Can not have local and global labels at the same time!")
 
         self.img_tfms = img_tfms
         self.label_tfms = label_tfms
+        self.return_labels = [return_labels] if isinstance(return_labels, str) else return_labels
+        self.verbose = verbose
 
         self.slides = []
         for i in range(len(slide_paths)):
@@ -62,7 +65,7 @@ class TileLevelDataset(Dataset):
                     simplify_tolerance=kwargs.get("simplify_tolerance", 0),
                 )
             if global_labels is not None:
-                slide.set_global_label(labels[i])
+                slide.set_global_label(global_labels[i])
             if label_paths is not None:
                 slide.load_label_from_json(
                     path=label_paths[i],
@@ -82,6 +85,7 @@ class TileLevelDataset(Dataset):
             annotation_align=kwargs.get("annotation_align", False),
             region_overlap=kwargs.get("region_overlap", 0.0),
             with_labels=kwargs.get("with_labels", False),
+            filter_by_label_func=kwargs.get("filter_by_label_func"),
         )
 
         self.setup_epoch(
@@ -101,12 +105,18 @@ class TileLevelDataset(Dataset):
         annotation_align: bool = False,
         region_overlap: float = 0.0,
         with_labels: bool = False,
+        filter_by_label_func: Optional[Callable] = None,
     ):
         """
         Call .setup_regions(...) for all .slides
         See `slide_tools.objects.Slide`
         """
-        for slide in self.slides:
+        
+        iterator = self.slides
+        if self.verbose:
+            iterator = tqdm(iterator, desc="Setup Regions")
+        
+        for slide in iterator:
             slide.setup_regions(
                 size=size,
                 unit=unit,
@@ -115,6 +125,7 @@ class TileLevelDataset(Dataset):
                 annotation_align=annotation_align,
                 region_overlap=region_overlap,
                 with_labels=with_labels,
+                filter_by_label_func=filter_by_label_func,
             )
 
     def setup_epoch(
@@ -250,11 +261,13 @@ class TileLevelDataset(Dataset):
 
         if self.img_tfms is not None:
             img = self.img_tfms(img)
+            
+        out = {"img": img}
 
-        if slide.labels is not None:
-            label = {k: slide.labels[k][region_id] for k in slide.labels}
+        if self.return_labels is not None:
+            label = {k: slide.labels[k][region_idx] for k in self.return_labels}
             if self.label_tfms is not None:
                 label = self.label_tfms(label)
-            return img, label
-        else:
-            return img
+            out.update(label)
+        
+        return out
