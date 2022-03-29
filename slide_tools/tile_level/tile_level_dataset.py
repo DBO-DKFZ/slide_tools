@@ -1,10 +1,10 @@
 import random
 from functools import partial
-from tqdm import tqdm
 from typing import Callable, Optional, Sequence, Union
 
 import numpy as np
 from torch.utils.data import Dataset
+from tqdm import tqdm
 
 from ..objects import BalanceMode, LabelInterpolation, SizeUnit, Slide
 
@@ -21,6 +21,7 @@ class TileLevelDataset(Dataset):
         img_tfms: Optional[Callable] = None,
         label_tfms: Optional[Callable] = None,
         return_labels: Optional[Union[Sequence[str], str]] = None,
+        return_index: bool = False,
         verbose: bool = False,
         **kwargs
     ):
@@ -52,8 +53,11 @@ class TileLevelDataset(Dataset):
 
         self.img_tfms = img_tfms
         self.label_tfms = label_tfms
-        self.return_labels = [return_labels] if isinstance(return_labels, str) else return_labels
+        self.return_labels = (
+            [return_labels] if isinstance(return_labels, str) else return_labels
+        )
         self.verbose = verbose
+        self.return_index = return_index
 
         self.slides = []
         for i in range(len(slide_paths)):
@@ -111,11 +115,11 @@ class TileLevelDataset(Dataset):
         Call .setup_regions(...) for all .slides
         See `slide_tools.objects.Slide`
         """
-        
+
         iterator = self.slides
         if self.verbose:
             iterator = tqdm(iterator, desc="Setup Regions")
-        
+
         for slide in iterator:
             slide.setup_regions(
                 size=size,
@@ -261,7 +265,7 @@ class TileLevelDataset(Dataset):
 
         if self.img_tfms is not None:
             img = self.img_tfms(img)
-            
+
         out = {"img": img}
 
         if self.return_labels is not None:
@@ -269,5 +273,9 @@ class TileLevelDataset(Dataset):
             if self.label_tfms is not None:
                 label = self.label_tfms(label)
             out.update(label)
-        
+
+        if self.return_index:
+            out["slide_idx"] = slide_idx
+            out["region_idx"] = region_idx
+
         return out

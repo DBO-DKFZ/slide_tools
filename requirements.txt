@@ -1,0 +1,9 @@
+cucim
+numpy
+pandas
+pytorch_lightning
+rasterio
+scipy
+Shapely
+torch
+tqdm

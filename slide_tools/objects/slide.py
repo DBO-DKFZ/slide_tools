@@ -151,15 +151,15 @@ class Slide:
             return {k: label_funcs[k](x, y) for k in label_funcs}
 
         self.local_label_func = local_label_func
-        
+
     def get_labels(self, x: int, y: int):
         """
         Get global and local labels at (x, y).
-        
+
         Args:
             x (int): x-coordinate in pixels at level 0
             y (int): y-coordinate in pixels at level 0
-            
+
         Returns:
             labels (dict): e.g. {"tumor": [1,1,0, ...], ...}
         """
@@ -238,7 +238,7 @@ class Slide:
         if centroid_in_annotation:
             grid = grid + 0.5  # +0.5 for centroid of tiles
             # Round float coordinates to nearest grid idx
-            x_idx, y_idx = grid.T.round().astype(int)  
+            x_idx, y_idx = grid.T.round().astype(int)
 
             # Create binary mask of tiles overlapping the annotation
             mask = rio_rasterize(
@@ -249,7 +249,7 @@ class Slide:
 
         # Rescale to pixel coordinates
         regions = (size * grid).round().astype(int)
-        
+
         labels = None
         if with_labels or (filter_by_label_func is not None):
             x, y = (regions + size / 2).T
