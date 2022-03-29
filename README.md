@@ -1,7 +1,7 @@
 Getting rid of pre-saved tiles for good
 ---------------------------------------
 
-Pipelines involving WSIs usually pre-save tiles. This can have several downsides (storage requirements, unflexible, ...) but one huge upside: speed.
+Pipelines involving WSIs usually pre-save tiles. This can have several downsides (storage requirements, unflexible, ...) but one huge upside: speed.  
 This repo is a collection of useful tools to handle WSIs as fast as currently possible without pre-saving any tile and thereby getting rid of the downsides.
 
 Motivation
@@ -13,7 +13,7 @@ The biggest hit to loading speed comes from the fact that the internal tiles are
 
 This repo is designed to also handle annotations (GeoJSON from [QuPath](https://github.com/qupath/qupath)) and labels. The labels should follow this format:
 
-```json
+```yaml
 {
     "label_1": {
         "points": [[x_1, y_1], ...],  <-- pixel coordinatines at level=0
@@ -29,8 +29,9 @@ Labels are interpolated (nearest or linear) to cover the whole slide.
 Notebooks
 ---------
 - [Basic usage](notebooks/basic_usage.ipynb)
+- [Filtering tiles by label](notebooks/filtering_by_label.ipynb)
 - [Tile-Level Dataset](notebooks/tile_level_dataset.ipynb)
-- [Tile-Level DataModule](notebooks/tile_level_dataset.ipynb)
+- [Tile-Level DataModule](notebooks/tile_level_datamodule.ipynb)
 
 
 
@@ -45,10 +46,11 @@ How to contribute
 -----------------
 
 There are several ways in which you could contribute:  
-a) Create an issue because e.g. your use case is not covered yet or you found a bug
-b) Solve any already specified issue
-c) Enhance the package by writing new use cases or enhance existing ones
+-  Create an issue because e.g. your use case is not covered yet or you found a bug  
+-  Solve any already specified issue
+-  Enhance the package by writing new use cases or enhance existing ones  
 
-Every contribution has to happen inside a new branch from which you should then make a pull request.
-Please run [isort](https://github.com/PyCQA/isort) and [black](https://github.com/psf/black) before making pull requests:
+Every contribution has to happen inside a new branch from which you should then make a pull request.  
+
+Please run [isort](https://github.com/PyCQA/isort) and [black](https://github.com/psf/black) before making pull requests:  
 `isort -profile black slide_tools && black slide_tools`
