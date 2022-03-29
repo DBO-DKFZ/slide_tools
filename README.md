@@ -13,7 +13,7 @@ The biggest hit to loading speed comes from the fact that the internal tiles are
 
 This repo is designed to also handle annotations (GeoJSON from [QuPath](https://github.com/qupath/qupath)) and labels. The labels should follow this format:
 
-```json
+```yaml
 {
     "label_1": {
         "points": [[x_1, y_1], ...],  <-- pixel coordinatines at level=0
@@ -30,7 +30,7 @@ Notebooks
 ---------
 - [Basic usage](notebooks/basic_usage.ipynb)
 - [Tile-Level Dataset](notebooks/tile_level_dataset.ipynb)
-- [Tile-Level DataModule](notebooks/tile_level_dataset.ipynb)
+- [Tile-Level DataModule](notebooks/tile_level_datamodule.ipynb)
 
 
 
