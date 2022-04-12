@@ -28,7 +28,7 @@ Labels are interpolated (nearest or linear) to cover the whole slide.
 
 Notebooks
 ---------
-- [Basic usage](notebooks/basic_usage.ipynb)
+- [Basic usage](notebooks/slide.ipynb)
 - [Filtering tiles by label](notebooks/filtering_by_label.ipynb)
 - [Tile-Level Dataset](notebooks/tile_level_dataset.ipynb)
 - [Tile-Level DataModule](notebooks/tile_level_datamodule.ipynb)
