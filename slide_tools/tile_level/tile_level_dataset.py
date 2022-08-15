@@ -5,6 +5,7 @@ from typing import Callable, Optional, Sequence, Union
 import numpy as np
 from torch.utils.data import Dataset
 from tqdm import tqdm
+from numpy.random import default_rng
 
 from ..objects import BalanceMode, LabelInterpolation, SizeUnit, Slide
 
@@ -139,6 +140,8 @@ class TileLevelDataset(Dataset):
         balance_label_bins: int = 10,
         shuffle: bool = False,
         shuffle_chunk_size: int = 1,
+        with_replacement: bool = True,
+        strict_size_balance: bool = False,
     ):
         """
         Populate .samples with corresponding region from all .slides to iterate over.
@@ -149,8 +152,10 @@ class TileLevelDataset(Dataset):
             balance_label_bins (int, optional): number of bins for label digitization (default: 10)
             shuffle (bool): shuffle samples or not
             shuffle_chunk_size (int): chunk samples before shuffling for faster loading (default: 1)
+            with_replacement (bool): Whether to sample with or without replacement (default: True)
+            strict_size_balance (bool): Will choose random min(#tiles, balance_size_by) per slide (default: False)
 
-        Balancing by size and/or label will determine a regions weight for being sampled with replacement.
+        Balancing by size and/or label will determine a regions weight for being sampled with or without replacement.
         Shuffling can be done in chunks so that a worker is more likely to read multiple (neighboring) tiles
         from one slide which will likely lead to a speedup. Keep your batch size in mind as you will likely get
         batch_size/shuffle_chunk_size different slides inside each batch.
@@ -168,7 +173,7 @@ class TileLevelDataset(Dataset):
             assert isinstance(balance_size_by, BalanceMode) or isinstance(
                 balance_size_by, int
             )
-            weight = np.concatenate([np.broadcast_to(1 / size, size) for size in sizes])
+            
             if isinstance(balance_size_by, int):
                 num_samples = balance_size_by
             elif balance_size_by == BalanceMode.MIN:
@@ -179,14 +184,31 @@ class TileLevelDataset(Dataset):
                 num_samples = np.mean(sizes)
             elif balance_size_by == BalanceMode.MAX:
                 num_samples = np.max(sizes)
+                
+            if strict_size_balance:
+                weight = np.zeros(len(samples))
+                offset = 0
+                for size in sizes:
+                    n = min(size, num_samples)
+                    idx = default_rng(n).choice(size, size=n, replace=False)
+                    weight[idx + offset] = 1 / n
+                    offset += size
+            else:
+                weight = np.concatenate([np.broadcast_to(1 / size, size) for size in sizes])
 
             num_samples = int(len(sizes) * num_samples)
+            if not with_replacement:
+                num_samples = min(num_samples, sizes.sum())
 
         # Labels are digitized before balancing to also work with continous labels
         if balance_label_key is not None:
             labels = np.concatenate(
                 [slide.labels[balance_label_key] for slide in self.slides]
             )
+            if weight is not None:
+                if (weight == 0).sum() > 0:
+                    labels = labels[weight != 0]
+                
             assert len(labels) == sizes.sum()
             # 1e-6 because np.digitize does not include right most bin edge
             bins = np.linspace(0, labels.max() + 1e-6, balance_label_bins + 1)
@@ -198,6 +220,8 @@ class TileLevelDataset(Dataset):
                 label_weight[labels_bin_idx == value] = 1.0 / count
 
             if weight is not None:
+                if len(weight) != label_weight.sum():
+                    weight[weight != 0] = weight[weight != 0] * label_weight
                 weight = weight * label_weight
             else:
                 weight = label_weight
@@ -205,8 +229,10 @@ class TileLevelDataset(Dataset):
 
         if weight is not None:
             weight = weight / weight.sum()  # choice needs the sum == 1
+            if not with_replacement:
+                num_samples = min(num_samples, (weight != 0).sum())
             idx = np.random.choice(
-                len(weight), size=num_samples, replace=True, p=weight
+                len(weight), size=num_samples, replace=with_replacement, p=weight
             )
             if shuffle and shuffle_chunk_size == 1:
                 shuffle = False  # idx is already shuffled

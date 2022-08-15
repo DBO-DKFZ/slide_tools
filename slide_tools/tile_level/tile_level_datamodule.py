@@ -50,6 +50,8 @@ class TileLevelDataModule(pl.LightningDataModule):
         epoch_balance_label_bins: int = 10,
         epoch_shuffle: bool = False,
         epoch_shuffle_chunk_size: int = 1,
+        epoch_with_replacement: bool = True,
+        epoch_strict_size_balance: bool = False,
         verbose: bool = False,
         pin_memory: bool = False,
         **kwargs
@@ -89,6 +91,8 @@ class TileLevelDataModule(pl.LightningDataModule):
             epoch_balance_label_bins: see `slide_tools.TileLevelDataset.setup_epoch()`
             epoch_shuffle: see `slide_tools.TileLevelDataset.setup_epoch()`
             epoch_shuffle_chunk_size: see `slide_tools.TileLevelDataset.setup_epoch()`
+            epoch_with_replacement: see `slide_tools.TileLevelDataset.setup_epoch()`
+            epoch_strict_size_balance: see `slide_tools.TileLevelDataset.setup_epoch()`
             verbose: see `slide_tools.TileLevelDataset`
             pin_memory: see `torch.utils.data.DataLoader`
 
