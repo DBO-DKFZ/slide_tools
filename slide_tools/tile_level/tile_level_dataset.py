@@ -1,4 +1,5 @@
 import random
+import warnings
 from functools import partial
 from typing import Callable, Optional, Sequence, Union
 
@@ -81,7 +82,7 @@ class TileLevelDataset(Dataset):
                     linear_fill_value=kwargs.get("linear_fill_value", np.nan),
                 )
             self.slides.append(slide)
-
+            
         self.setup_regions(
             size=kwargs.get("size"),
             unit=kwargs.get("unit", SizeUnit.PIXEL),
@@ -92,7 +93,13 @@ class TileLevelDataset(Dataset):
             with_labels=kwargs.get("with_labels", False),
             filter_by_label_func=kwargs.get("filter_by_label_func"),
         )
-
+        
+        # Remove empty slides
+        empty = [i for i, slide in enumerate(self.slides) if len(slide.regions) == 0]
+        for idx in empty[::-1]:
+            warnings.warn(f"{slide_paths[idx]} has zero regions and is removed from the dataset!", stacklevel=2)
+            self.slides.pop(idx)
+                
         self.setup_epoch(
             balance_size_by=kwargs.get("balance_size_by"),
             balance_label_key=kwargs.get("balance_label_key"),
