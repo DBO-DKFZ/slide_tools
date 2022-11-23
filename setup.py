@@ -1,9 +1,10 @@
 from distutils.core import setup
+
 from setuptools import find_packages
 
 setup(
     name="slide_tools",
-    version="0.1.2",
+    version="0.1.3",
     packages=find_packages(),
     long_description=open("README.md").read(),
     install_requires=[
@@ -16,5 +17,6 @@ setup(
         "shapely",
         "torch",
         "tqdm",
-    ]
+        "xmltodict",
+    ],
 )

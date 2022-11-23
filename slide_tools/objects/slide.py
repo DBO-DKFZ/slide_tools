@@ -6,6 +6,7 @@ from typing import Callable, Optional, Sequence, Union
 
 import cucim
 import numpy as np
+import xmltodict
 from numpy.typing import ArrayLike
 from rasterio.features import rasterize as rio_rasterize
 from scipy import interpolate as scipy_interpolate
@@ -75,17 +76,34 @@ class Slide:
         Args:
             path (str): path
 
-        Supports population of slide.microns_per_pixel for SlideType.{APERIO}.
+        Supports population of slide.microns_per_pixel for SlideType.{APERIO, TIFF}.
         """
         self.image = cucim.CuImage(path)
         self.native_sizes = self.image.resolutions["level_tile_sizes"]
+        self.is_loaded = True
 
         if SlideType.APERIO.value in self.image.metadata:
             self.microns_per_pixel = float(self.image.metadata["aperio"]["MPP"])
+        elif SlideType.TIFF.value in self.image.metadata:
+            props = xmltodict.parse(self.image.raw_metadata)["OME"]["Image"]["Pixels"]
+            is_mu = (props["@PhysicalSizeXUnit"] == "µm") and (
+                props["@PhysicalSizeYUnit"] == "µm"
+            )
+            is_equal = props["@PhysicalSizeX"] == props["@PhysicalSizeY"]
+            if is_mu and is_equal:
+                self.microns_per_pixel = float(props["@PhysicalSizeX"])
+            else:
+                raise RuntimeError(
+                    f"Could not extract microns_per_pixel from:\n{props}"
+                )
         else:
             raise NotImplementedError(
                 "Unknown WSI: Please add a way to extract microns_per_pixel for your WSI!"
             )
+
+    def unload_wsi(self):
+        self.image = self.image.path
+        self.is_loaded = False
 
     def set_global_label(self, labels: dict):
         """
@@ -198,7 +216,7 @@ class Slide:
             with_labels (bool): whether to load corresponding labels (default: False)
             filter_by_label_func (callable): should convert slide.labels dictionary into mask (`True` == keep) (default: None)
         """
-        assert self.image is not None
+        assert self.is_loaded
 
         # Use native resolution if size is unspecified
         if size is None:
@@ -268,4 +286,7 @@ class Slide:
 
     def read_region(self, *args, **kwargs) -> ArrayLike:
         """Wrap the call to a CuImage to return an array for convenience."""
+        if not self.is_loaded:
+            self.image = cucim.CuImage(self.image)
+            self.is_loaded = True
         return np.asarray(self.image.read_region(*args, **kwargs))

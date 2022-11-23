@@ -4,9 +4,9 @@ from functools import partial
 from typing import Callable, Optional, Sequence, Union
 
 import numpy as np
+from numpy.random import default_rng
 from torch.utils.data import Dataset
 from tqdm import tqdm
-from numpy.random import default_rng
 
 from ..objects import BalanceMode, LabelInterpolation, SizeUnit, Slide
 
@@ -25,7 +25,9 @@ class TileLevelDataset(Dataset):
         return_labels: Optional[Union[Sequence[str], str]] = None,
         return_index: bool = False,
         verbose: bool = False,
-        **kwargs
+        lazy_loading: bool = False,
+        location_wiggle: Optional[float] = None,
+        **kwargs,
     ):
         """
         Map-style dataset for tile-level training of WSI.
@@ -60,6 +62,7 @@ class TileLevelDataset(Dataset):
         )
         self.verbose = verbose
         self.return_index = return_index
+        self.location_wiggle = location_wiggle
 
         self.slides = []
         for i in range(len(slide_paths)):
@@ -82,7 +85,7 @@ class TileLevelDataset(Dataset):
                     linear_fill_value=kwargs.get("linear_fill_value", np.nan),
                 )
             self.slides.append(slide)
-            
+
         self.setup_regions(
             size=kwargs.get("size"),
             unit=kwargs.get("unit", SizeUnit.PIXEL),
@@ -93,20 +96,29 @@ class TileLevelDataset(Dataset):
             with_labels=kwargs.get("with_labels", False),
             filter_by_label_func=kwargs.get("filter_by_label_func"),
         )
-        
+
         # Remove empty slides
         empty = [i for i, slide in enumerate(self.slides) if len(slide.regions) == 0]
         for idx in empty[::-1]:
-            warnings.warn(f"{slide_paths[idx]} has zero regions and is removed from the dataset!", stacklevel=2)
+            warnings.warn(
+                f"{slide_paths[idx]} has zero regions and is removed from the dataset!",
+                stacklevel=2,
+            )
             self.slides.pop(idx)
-                
+
         self.setup_epoch(
             balance_size_by=kwargs.get("balance_size_by"),
             balance_label_key=kwargs.get("balance_label_key"),
             balance_label_bins=kwargs.get("balance_label_bins", 10),
             shuffle=kwargs.get("shuffle", False),
             shuffle_chunk_size=kwargs.get("shuffle_chunk_size", 1),
+            with_replacement=kwargs.get("with_replacement", True),
+            strict_size_balance=kwargs.get("strict_size_balance", False),
         )
+
+        if lazy_loading:
+            for slide in self.slides:
+                slide.unload_wsi()
 
     def setup_regions(
         self,
@@ -180,7 +192,7 @@ class TileLevelDataset(Dataset):
             assert isinstance(balance_size_by, BalanceMode) or isinstance(
                 balance_size_by, int
             )
-            
+
             if isinstance(balance_size_by, int):
                 num_samples = balance_size_by
             elif balance_size_by == BalanceMode.MIN:
@@ -191,7 +203,7 @@ class TileLevelDataset(Dataset):
                 num_samples = np.mean(sizes)
             elif balance_size_by == BalanceMode.MAX:
                 num_samples = np.max(sizes)
-                
+
             if strict_size_balance:
                 weight = np.zeros(len(samples))
                 offset = 0
@@ -201,7 +213,9 @@ class TileLevelDataset(Dataset):
                     weight[idx + offset] = 1 / n
                     offset += size
             else:
-                weight = np.concatenate([np.broadcast_to(1 / size, size) for size in sizes])
+                weight = np.concatenate(
+                    [np.broadcast_to(1 / size, size) for size in sizes]
+                )
 
             num_samples = int(len(sizes) * num_samples)
             if not with_replacement:
@@ -215,7 +229,7 @@ class TileLevelDataset(Dataset):
             if weight is not None:
                 if (weight == 0).sum() > 0:
                     labels = labels[weight != 0]
-                
+
             assert len(labels) == sizes.sum()
             # 1e-6 because np.digitize does not include right most bin edge
             bins = np.linspace(0, labels.max() + 1e-6, balance_label_bins + 1)
@@ -294,7 +308,11 @@ class TileLevelDataset(Dataset):
 
         slide = self.slides[slide_idx]
         region = slide.regions[region_idx]
-        img = slide.read_region(location=region[:2], size=region[2:])
+        location, size = region[:2], region[2:]
+        if self.location_wiggle is not None:
+            wiggle = self.location_wiggle * size * 2 * (np.random.rand(2) - 0.5)
+            location += wiggle.astype(int)
+        img = slide.read_region(location=location, size=size)
 
         if self.img_tfms is not None:
             img = self.img_tfms(img)

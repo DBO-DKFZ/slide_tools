@@ -10,6 +10,7 @@ class SizeUnit(Enum):
 
 class SlideType(Enum):
     APERIO = "aperio"
+    TIFF = "tiff"
 
 
 class LabelInterpolation(Enum):

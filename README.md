@@ -38,8 +38,7 @@ Notebooks
 Installation
 ------------
 
-1) Make sure your current environment fulfills the requirements: `pip install -r requirements.txt`
-2) Install the package in editable mode in your environment: `pip install -e .`
+Install the package in editable mode in your environment: `pip install -e .`
 
 
 How to contribute
