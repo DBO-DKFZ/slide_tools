@@ -79,7 +79,8 @@ class Slide:
         Supports population of slide.microns_per_pixel for SlideType.{APERIO, TIFF}.
         """
         self.image = cucim.CuImage(path)
-        self.native_sizes = self.image.resolutions["level_tile_sizes"]
+        self.native_sizes = np.array(self.image.resolutions["level_tile_sizes"]) \
+            * np.array(self.image.resolutions["level_downsamples"], dtype=int)[..., None]
         self.is_loaded = True
 
         if SlideType.APERIO.value in self.image.metadata:
@@ -217,10 +218,11 @@ class Slide:
             filter_by_label_func (callable): should convert slide.labels dictionary into mask (`True` == keep) (default: None)
         """
         assert self.is_loaded
+        self.level = level
 
         # Use native resolution if size is unspecified
         if size is None:
-            size = self.native_sizes[level]
+            size = self.native_sizes[self.level]
             unit = SizeUnit.PIXEL
         elif isinstance(size, int):
             size = (size, size)
@@ -289,4 +291,4 @@ class Slide:
         if not self.is_loaded:
             self.image = cucim.CuImage(self.image)
             self.is_loaded = True
-        return np.asarray(self.image.read_region(*args, **kwargs))
+        return np.asarray(self.image.read_region(*args, **kwargs, level=self.level))
