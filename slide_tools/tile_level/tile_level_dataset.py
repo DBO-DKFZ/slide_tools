@@ -65,7 +65,12 @@ class TileLevelDataset(Dataset):
         self.location_wiggle = location_wiggle
 
         self.slides = []
-        for i in range(len(slide_paths)):
+        
+        iterator = range(len(slide_paths))
+        if self.verbose:
+            iterator = tqdm(iterator, desc="Load slides")
+            
+        for i in iterator:
             slide = Slide()
             slide.load_wsi(slide_paths[i])
             if annotation_paths is not None:
@@ -117,8 +122,7 @@ class TileLevelDataset(Dataset):
         )
 
         if lazy_loading:
-            for slide in self.slides:
-                slide.unload_wsi()
+            self.unload_wsi()
 
     def setup_regions(
         self,
@@ -179,6 +183,9 @@ class TileLevelDataset(Dataset):
         from one slide which will likely lead to a speedup. Keep your batch size in mind as you will likely get
         batch_size/shuffle_chunk_size different slides inside each batch.
         """
+        if self.verbose:
+            print("Setting up epoch")
+            
         sizes = np.array([len(slide.regions) for slide in self.slides])
         samples = np.concatenate(
             [
@@ -299,6 +306,10 @@ class TileLevelDataset(Dataset):
                 np.random.shuffle(samples)
 
         self.samples = samples
+        
+    def unload_wsi(self):
+        for slide in self.slides:
+            slide.unload_wsi()
 
     def __len__(self):
         return len(self.samples)

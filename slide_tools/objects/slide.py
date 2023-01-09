@@ -80,6 +80,7 @@ class Slide:
         """
         self.image = cucim.CuImage(path)
         self.native_sizes = self.image.resolutions["level_tile_sizes"]
+        self.image_shape = self.image.shape
         self.is_loaded = True
 
         if SlideType.APERIO.value in self.image.metadata:
@@ -102,8 +103,9 @@ class Slide:
             )
 
     def unload_wsi(self):
-        self.image = self.image.path
-        self.is_loaded = False
+        if self.is_loaded:
+            self.image = self.image.path
+            self.is_loaded = False
 
     def set_global_label(self, labels: dict):
         """
@@ -231,7 +233,7 @@ class Slide:
             size = [int(s / self.microns_per_pixel) for s in size]
 
         size = np.asarray(size)
-        x_min, y_min, x_max, y_max = 0, 0, *(np.array(self.image.shape[1::-1]) / size)
+        x_min, y_min, x_max, y_max = 0, 0, *(np.array(self.image_shape[1::-1]) / size)
 
         if centroid_in_annotation:
             assert self.annotations is not None
