@@ -79,13 +79,9 @@ class Slide:
         Supports population of slide.microns_per_pixel for SlideType.{APERIO, TIFF}.
         """
         self.image = cucim.CuImage(path)
-<<<<<<< HEAD
-        self.native_sizes = self.image.resolutions["level_tile_sizes"]
         self.image_shape = self.image.shape
-=======
         self.native_sizes = np.array(self.image.resolutions["level_tile_sizes"]) \
             * np.array(self.image.resolutions["level_downsamples"], dtype=int)[..., None]
->>>>>>> b9d593fd74e4b3cfaa39f50aff277db5d73c2aba
         self.is_loaded = True
 
         if SlideType.APERIO.value in self.image.metadata:
