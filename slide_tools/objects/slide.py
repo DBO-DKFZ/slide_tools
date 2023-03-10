@@ -69,12 +69,13 @@ class Slide:
         if len(self.annotations) == 0:
             raise RuntimeError(f"No annotation found in: {path}")
 
-    def load_wsi(self, path: str):
+    def load_wsi(self, path: str, raise_resolution: bool = True):
         """
         Load WSI with cuCIM and populate slide.image.
 
         Args:
             path (str): path
+            raise_resolution (bool): Raise error on unknown pixel resolution (default: True)
 
         Supports population of slide.microns_per_pixel for SlideType.{APERIO, TIFF}.
         """
@@ -87,18 +88,16 @@ class Slide:
         if SlideType.APERIO.value in self.image.metadata:
             self.microns_per_pixel = float(self.image.metadata["aperio"]["MPP"])
         elif SlideType.TIFF.value in self.image.metadata:
-            props = xmltodict.parse(self.image.raw_metadata)["OME"]["Image"]["Pixels"]
-            is_mu = (props["@PhysicalSizeXUnit"] == "µm") and (
-                props["@PhysicalSizeYUnit"] == "µm"
-            )
-            is_equal = props["@PhysicalSizeX"] == props["@PhysicalSizeY"]
-            if is_mu and is_equal:
-                self.microns_per_pixel = float(props["@PhysicalSizeX"])
-            else:
-                raise RuntimeError(
-                    f"Could not extract microns_per_pixel from:\n{props}"
+            if len(self.image.raw_metadata) > 0:
+                props = xmltodict.parse(self.image.raw_metadata)["OME"]["Image"]["Pixels"]
+                is_mu = (props["@PhysicalSizeXUnit"] == "µm") and (
+                    props["@PhysicalSizeYUnit"] == "µm"
                 )
-        else:
+                is_equal = props["@PhysicalSizeX"] == props["@PhysicalSizeY"]
+                if is_mu and is_equal:
+                    self.microns_per_pixel = float(props["@PhysicalSizeX"])
+                    
+        if raise_resolution and self.microns_per_pixel is None:
             raise NotImplementedError(
                 "Unknown WSI: Please add a way to extract microns_per_pixel for your WSI!"
             )
