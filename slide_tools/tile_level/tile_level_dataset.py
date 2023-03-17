@@ -4,6 +4,7 @@ from functools import partial
 from typing import Callable, Optional, Sequence, Union
 
 import numpy as np
+import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
@@ -64,6 +65,9 @@ class TileLevelDataset(Dataset):
         self.verbose = verbose
         self.return_index = return_index
         self.location_wiggle = location_wiggle
+        
+        self.rng = np.random.default_rng(random_state or torch.random.initial_seed())
+        self.reload = None
 
         self.slides = []
 
@@ -130,9 +134,6 @@ class TileLevelDataset(Dataset):
 
         if lazy_loading:
             self.unload_wsi()
-
-        self.rng = np.random.default_rng(random_state or torch.random.initial_seed())
-        self.reload = None
 
     def setup_regions(
         self,
