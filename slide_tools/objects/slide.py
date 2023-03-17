@@ -93,7 +93,9 @@ class Slide:
             self.microns_per_pixel = float(self.image.metadata["aperio"]["MPP"])
         elif SlideType.TIFF.value in self.image.metadata:
             if len(self.image.raw_metadata) > 0:
-                props = xmltodict.parse(self.image.raw_metadata)["OME"]["Image"]["Pixels"]
+                props = xmltodict.parse(self.image.raw_metadata)["OME"]["Image"][
+                    "Pixels"
+                ]
                 is_mu = (props["@PhysicalSizeXUnit"] == "µm") and (
                     props["@PhysicalSizeYUnit"] == "µm"
                 )
