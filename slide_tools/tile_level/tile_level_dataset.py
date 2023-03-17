@@ -215,11 +215,11 @@ class TileLevelDataset(Dataset):
             offset = 0
             for size in sizes:
                 n = int(min(size, num_samples))
-                idx = self.rng.choice(size, size=n, replace=False)
-                sample_idx.extend(idx.tolist())
+                idx = offset + self.rng.choice(size, size=n, replace=False)
+                sample_idx.append(idx)
                 offset += size
 
-            samples_idx = np.array(sample_idx)
+            sample_idx = np.concatenate(sample_idx)
             samples = samples[sample_idx]
 
         if shuffle:
