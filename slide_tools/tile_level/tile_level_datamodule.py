@@ -119,6 +119,7 @@ class TileLevelDataModule(pl.LightningDataModule):
 
     def correct_hparams(self):
         """Helper function to split the hparams and correct them."""
+
         # Helper to split off hparams beginning with prefix
         def split_off_by(prefix, hparams):
             return pl.utilities.parsing.AttributeDict(
@@ -149,7 +150,6 @@ class TileLevelDataModule(pl.LightningDataModule):
         pass
 
     def setup(self, stage: Optional[str] = None):
-
         # Helper to join root onto relative path series
         rootify_ = lambda path: os.path.join(self.hparams.root, path)
 
