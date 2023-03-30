@@ -28,7 +28,7 @@ class TileLevelDataset(Dataset):
         lazy_loading: bool = False,
         location_wiggle: Optional[float] = None,
         simple_epoch: bool = False,
-        random_state: int = None,
+        random_state: Optional[int] = None,
         **kwargs,
     ):
         """
