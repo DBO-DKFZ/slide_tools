@@ -236,7 +236,11 @@ class Slide:
         if size is None:
             size = self.native_sizes[self.level]
             unit = SizeUnit.PIXEL
-        elif isinstance(size, int):
+        elif isinstance(size, int) and size <= 10:
+            native_size = self.native_sizes[self.level]
+            multiple = int(size * native_size)
+            size = (multiple, multiple)
+        elif isinstance(size, int) and size > 10:
             size = (size, size)
 
         if unit == SizeUnit.MICRON:
