@@ -250,12 +250,6 @@ class Slide:
 
         size = np.asarray(size)
         x_min, y_min, x_max, y_max = 0, 0, *(np.array(self.image_shape[1::-1]) / size)
-        
-        print()
-        print(self.image)
-        print(size)
-        print(x_min, y_min, x_max, y_max)
-        print()
 
         if centroid_in_annotation:
             assert self.annotations is not None
