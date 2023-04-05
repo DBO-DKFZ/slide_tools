@@ -236,11 +236,12 @@ class Slide:
         if size is None:
             size = self.native_sizes[self.level]
             unit = SizeUnit.PIXEL
-        elif isinstance(size, int) and size <= 10:
-            native_size = self.native_sizes[self.level]
-            size = (size * native_size).astype(int)
-        elif isinstance(size, int) and size > 10:
-            size = (size, size)
+        elif isinstance(size, int) and unit == SizeUnit.PIXEL:
+            if size <= 10:
+                native_size = self.native_sizes[self.level]
+                size = (size * native_size).astype(int)
+            else:
+                size = (size, size)
 
         if unit == SizeUnit.MICRON:
             assert size is not None
@@ -249,6 +250,12 @@ class Slide:
 
         size = np.asarray(size)
         x_min, y_min, x_max, y_max = 0, 0, *(np.array(self.image_shape[1::-1]) / size)
+        
+        print()
+        print(self.image)
+        print(size)
+        print(x_min, y_min, x_max, y_max)
+        print()
 
         if centroid_in_annotation:
             assert self.annotations is not None
