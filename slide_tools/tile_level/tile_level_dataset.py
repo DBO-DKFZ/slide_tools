@@ -67,7 +67,6 @@ class TileLevelDataset(Dataset):
         self.location_wiggle = location_wiggle
         
         self.rng = np.random.default_rng(random_state or torch.random.initial_seed())
-        self.reload = None
 
         self.slides = []
 
@@ -115,14 +114,15 @@ class TileLevelDataset(Dataset):
                 stacklevel=2,
             )
             self.slides.pop(idx)
-
+        
+        self.simple_epoch = simple_epoch
         if simple_epoch:
             self.setup_epoch_no_sampling(
                 balance_strict_size_by=kwargs.get("balance_size_by"),
                 shuffle=kwargs.get("shuffle", False),
             )
         else:
-            self.setup_epoch(
+            self.setup_epoch_with_sampling(
                 balance_size_by=kwargs.get("balance_size_by"),
                 balance_label_key=kwargs.get("balance_label_key"),
                 balance_label_bins=kwargs.get("balance_label_bins", 10),
@@ -166,6 +166,12 @@ class TileLevelDataset(Dataset):
                 with_labels=with_labels,
                 filter_by_label_func=filter_by_label_func,
             )
+            
+    def reload(self):
+        if self.simple_epoch:
+            self.setup_epoch_no_sampling(**self._reload_kwargs)
+        else:
+            self.setup_epoch_with_sampling(**self._reload_kwargs)
 
     def setup_epoch_no_sampling(
         self,
@@ -228,12 +234,12 @@ class TileLevelDataset(Dataset):
 
         self.samples = samples
 
-        def reload():
-            self.setup_epoch_no_sampling(balance_strict_size_by, shuffle)
+        self._reload_kwargs = {
+            "balance_strict_size_by": balance_strict_size_by,
+            "shuffle": shuffle,
+        }
 
-        self.reload = reload
-
-    def setup_epoch(
+    def setup_epoch_with_sampling(
         self,
         balance_size_by: Optional[Union[BalanceMode, int]] = None,
         balance_label_key: Optional[str] = None,
@@ -384,19 +390,16 @@ class TileLevelDataset(Dataset):
                 self.rng.shuffle(samples)
 
         self.samples = samples
-
-        def reload():
-            self.setup_epoch(
-                balance_size_by,
-                balance_label_key,
-                balance_label_bins,
-                shuffle,
-                shuffle_chunk_size,
-                with_replacement,
-                strict_size_balance,
-            )
-
-        self.reload = reload
+        
+        self._reload_kwargs = {
+            "balance_size_by": balance_size_by,
+            "balance_label_key": balance_label_key,
+            "balance_label_bins": balance_label_bins,
+            "shuffle": shuffle,
+            "shuffle_chunk_size": shuffle_chunk_size,
+            "with_replacement": with_replacement,
+            "strict_size_balance": strict_size_balance,
+        }
 
     def unload_wsi(self):
         for slide in self.slides:
