@@ -28,7 +28,7 @@ class TileLevelDataset(Dataset):
         lazy_loading: bool = False,
         location_wiggle: Optional[float] = None,
         simple_epoch: bool = False,
-        random_state: Optional[int] = None,
+        seed: int = 0,
         **kwargs,
     ):
         """
@@ -65,8 +65,7 @@ class TileLevelDataset(Dataset):
         self.verbose = verbose
         self.return_index = return_index
         self.location_wiggle = location_wiggle
-        
-        self.rng = np.random.default_rng(random_state or torch.random.initial_seed())
+        self.seed = 0
 
         self.slides = []
 
@@ -120,6 +119,7 @@ class TileLevelDataset(Dataset):
             self.setup_epoch_no_sampling(
                 balance_strict_size_by=kwargs.get("balance_size_by"),
                 shuffle=kwargs.get("shuffle", False),
+                epoch=0,
             )
         else:
             self.setup_epoch_with_sampling(
@@ -130,6 +130,7 @@ class TileLevelDataset(Dataset):
                 shuffle_chunk_size=kwargs.get("shuffle_chunk_size", 1),
                 with_replacement=kwargs.get("with_replacement", True),
                 strict_size_balance=kwargs.get("strict_size_balance", False),
+                epoch=0,
             )
 
         if lazy_loading:
@@ -167,16 +168,17 @@ class TileLevelDataset(Dataset):
                 filter_by_label_func=filter_by_label_func,
             )
             
-    def reload(self):
+    def reload(self, epoch=None):
         if self.simple_epoch:
-            self.setup_epoch_no_sampling(**self._reload_kwargs)
+            self.setup_epoch_no_sampling(**self._reload_kwargs, epoch=epoch)
         else:
-            self.setup_epoch_with_sampling(**self._reload_kwargs)
+            self.setup_epoch_with_sampling(**self._reload_kwargs, epoch=epoch)
 
     def setup_epoch_no_sampling(
         self,
         balance_strict_size_by: Optional[Union[BalanceMode, int]] = None,
         shuffle: bool = False,
+        epoch: Optional[int] = None,
     ):
         """
         Populate .samples with corresponding region from all .slides to iterate over.
@@ -185,14 +187,14 @@ class TileLevelDataset(Dataset):
         Args:
             balance_strict_size_by (BalanceMode or int, optional): Determines N_samples = len(.slides) * balance_size_by
             shuffle (bool): shuffle samples or not
-            shuffle_chunk_size (int): chunk samples before shuffling for faster loading (default: 1)
+            epoch (int, optional): Provided by sampler to deterministically sample
 
-        Shuffling can be done in chunks so that a worker is more likely to read multiple (neighboring) tiles
-        from one slide which will likely lead to a speedup. Keep your batch size in mind as you will likely get
-        batch_size/shuffle_chunk_size different slides inside each batch.
         """
         if self.verbose:
             print("Setting up simple epoch")
+            
+        seed = self.seed + epoch if epoch is not None else None
+        rng = np.random.default_rng(seed)
 
         sizes = np.array([len(slide.regions) for slide in self.slides])
         samples = np.concatenate(
@@ -222,7 +224,7 @@ class TileLevelDataset(Dataset):
             offset = 0
             for size in sizes:
                 n = int(min(size, num_samples))
-                idx = offset + self.rng.choice(size, size=n, replace=False)
+                idx = offset + rng.choice(size, size=n, replace=False)
                 sample_idx.append(idx)
                 offset += size
 
@@ -230,7 +232,7 @@ class TileLevelDataset(Dataset):
             samples = samples[sample_idx]
 
         if shuffle:
-            self.rng.shuffle(samples)
+            rng.shuffle(samples)
 
         self.samples = samples
 
@@ -248,6 +250,7 @@ class TileLevelDataset(Dataset):
         shuffle_chunk_size: int = 1,
         with_replacement: bool = True,
         strict_size_balance: bool = False,
+        epoch: Optional[int] = None,
     ):
         """
         Populate .samples with corresponding region from all .slides to iterate over.
@@ -260,6 +263,7 @@ class TileLevelDataset(Dataset):
             shuffle_chunk_size (int): chunk samples before shuffling for faster loading (default: 1)
             with_replacement (bool): Whether to sample with or without replacement (default: True)
             strict_size_balance (bool): Will choose random min(#tiles, balance_size_by) per slide (default: False)
+            epoch (int, optional): Provided by sampler to deterministically sample
 
         Balancing by size and/or label will determine a regions weight for being sampled with or without replacement.
         Shuffling can be done in chunks so that a worker is more likely to read multiple (neighboring) tiles
@@ -268,6 +272,9 @@ class TileLevelDataset(Dataset):
         """
         if self.verbose:
             print("Setting up epoch")
+            
+        seed = self.seed + epoch if epoch is not None else None
+        rng = np.random.default_rng(seed)
 
         sizes = np.array([len(slide.regions) for slide in self.slides])
         samples = np.concatenate(
@@ -299,7 +306,7 @@ class TileLevelDataset(Dataset):
                 offset = 0
                 for size in sizes:
                     n = min(size, num_samples)
-                    idx = default_rng(n).choice(size, size=n, replace=False)
+                    idx = rng.choice(size, size=n, replace=False)
                     weight[idx + offset] = 1 / n
                     offset += size
             else:
@@ -342,7 +349,7 @@ class TileLevelDataset(Dataset):
             weight = weight / weight.sum()  # choice needs the sum == 1
             if not with_replacement:
                 num_samples = min(num_samples, (weight != 0).sum())
-            idx = self.rng.choice(
+            idx = rng.choice(
                 len(weight), size=num_samples, replace=with_replacement, p=weight
             )
             if shuffle and shuffle_chunk_size == 1:
@@ -364,11 +371,11 @@ class TileLevelDataset(Dataset):
                 duplicates = unique[have_duplicates]
                 duplicate_counts = counts[have_duplicates] - 1
                 rest = np.repeat(duplicates, duplicate_counts, axis=0)
-                self.rng.shuffle(rest)  # Shuffle before sprinkling back in
+                rng.shuffle(rest)  # Shuffle before sprinkling back in
 
                 # Sprinkle duplicates uniformly into unique
                 samples_sorted = np.empty_like(samples)
-                duplicate_idx = self.rng.choice(
+                duplicate_idx = rng.choice(
                     len(samples), size=len(rest), replace=False
                 )
                 duplicate_mask = np.zeros(len(samples), dtype=bool)
@@ -380,14 +387,14 @@ class TileLevelDataset(Dataset):
                 # Chunk shuffle
                 idx = np.arange(len(samples))
                 chunks = np.array_split(idx, len(idx) // shuffle_chunk_size)
-                random.seed(self.rng.bit_generator.random_raw())
+                random.seed(rng.bit_generator.random_raw())
                 random.shuffle(
                     chunks
                 )  # Using random because numpy can not handle N % chunk_size != 0
                 idx_shuffled = np.concatenate(chunks)
                 samples = samples[idx_shuffled]
             else:
-                self.rng.shuffle(samples)
+                rng.shuffle(samples)
 
         self.samples = samples
         
@@ -415,7 +422,8 @@ class TileLevelDataset(Dataset):
         region = slide.regions[region_idx]
         location, size = region[:2], region[2:]
         if self.location_wiggle is not None:
-            wiggle = self.location_wiggle * size * 2 * (self.rng.random(2) - 0.5)
+            # Note: Undeterministic wiggle across replicas in DDP should be save here
+            wiggle = self.location_wiggle * size * 2 * (np.random.random(2) - 0.5)
             location += wiggle.astype(int)
         img = slide.read_region(location=location, size=size)
 
