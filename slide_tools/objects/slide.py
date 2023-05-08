@@ -213,7 +213,7 @@ class Slide:
         region_overlap: float = 0.0,
         with_labels: bool = False,
         filter_by_label_func: Optional[Callable] = None,
-        annotation_resolution_factor: float = 1.,
+        annotation_resolution_factor: float = 2.,
     ):
         """
         Load all suitable regions (and corresponding labels) on the slide.
