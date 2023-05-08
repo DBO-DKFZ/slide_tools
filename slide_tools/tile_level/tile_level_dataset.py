@@ -103,6 +103,7 @@ class TileLevelDataset(Dataset):
             region_overlap=kwargs.get("region_overlap", 0.0),
             with_labels=kwargs.get("with_labels", False),
             filter_by_label_func=kwargs.get("filter_by_label_func"),
+            annotation_resolution_factor=kwargs.get("annotation_resolution_factor", 1.)
         )
 
         # Remove empty slides
@@ -146,6 +147,7 @@ class TileLevelDataset(Dataset):
         region_overlap: float = 0.0,
         with_labels: bool = False,
         filter_by_label_func: Optional[Callable] = None,
+        annotation_resolution_factor: float = 1.,
     ):
         """
         Call .setup_regions(...) for all .slides
@@ -166,6 +168,7 @@ class TileLevelDataset(Dataset):
                 region_overlap=region_overlap,
                 with_labels=with_labels,
                 filter_by_label_func=filter_by_label_func,
+                annotation_resolution_factor=annotation_resolution_factor,
             )
             
     def reload(self, epoch=None):

@@ -213,6 +213,7 @@ class Slide:
         region_overlap: float = 0.0,
         with_labels: bool = False,
         filter_by_label_func: Optional[Callable] = None,
+        annotation_resolution_factor: float = 1.,
     ):
         """
         Load all suitable regions (and corresponding labels) on the slide.
@@ -228,6 +229,7 @@ class Slide:
             region_overlap (float): overlap between neighboring regions in [0,1) (default: 0)
             with_labels (bool): whether to load corresponding labels (default: False)
             filter_by_label_func (callable): should convert slide.labels dictionary into mask (`True` == keep) (default: None)
+            annotation_resolution_factor (float): internal annotation resolution in units of region resolution (default: 1)
         """
         assert self.is_loaded
         self.level = level
@@ -257,8 +259,9 @@ class Slide:
             annotation = shapely_geometry.GeometryCollection(
                 [annotation.geometry for annotation in self.annotations]
             )
+            factor =  annotation_resolution_factor / size
             scaled = shapely_affinity.scale(
-                geom=annotation, xfact=1 / size[0], yfact=1 / size[1], origin=(0, 0)
+                geom=annotation, xfact=factor[0], yfact=factor[1], origin=(0, 0)
             )
             if annotation_align:
                 x_min, y_min, x_max, y_max = scaled.bounds
@@ -272,15 +275,16 @@ class Slide:
         grid = grid.T
 
         if centroid_in_annotation:
-            grid = grid + 0.5  # +0.5 for centroid of tiles
+            centroid = annotation_resolution_factor * (grid + 0.5)  # +0.5 for centroid of tiles
+            mask_shape = annotation_resolution_factor * np.array([y_max, x_max])
+            
             # Round float coordinates to nearest grid idx
-            x_idx, y_idx = grid.T.round().astype(int)
+            x_idx, y_idx = centroid.T.round().astype(int)
 
             # Create binary mask of tiles overlapping the annotation
             mask = rio_rasterize(
-                shapes=[scaled], out_shape=(np.array([y_max, x_max]) + 2).astype(int)
+                shapes=[scaled], out_shape=(mask_shape + 2).astype(int)
             ).astype(bool)
-
             grid = grid[mask[y_idx, x_idx]]
 
         # Rescale to pixel coordinates
