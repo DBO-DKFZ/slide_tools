@@ -213,7 +213,7 @@ class Slide:
         region_overlap: float = 0.0,
         with_labels: bool = False,
         filter_by_label_func: Optional[Callable] = None,
-        annotation_resolution_factor: float = 2.,
+        annotation_resolution_factor: float = 2.0,
     ):
         """
         Load all suitable regions (and corresponding labels) on the slide.
@@ -259,7 +259,7 @@ class Slide:
             annotation = shapely_geometry.GeometryCollection(
                 [annotation.geometry for annotation in self.annotations]
             )
-            factor =  annotation_resolution_factor / size
+            factor = annotation_resolution_factor / size
             scaled = shapely_affinity.scale(
                 geom=annotation, xfact=factor[0], yfact=factor[1], origin=(0, 0)
             )
@@ -275,9 +275,11 @@ class Slide:
         grid = grid.T
 
         if centroid_in_annotation:
-            centroid = annotation_resolution_factor * (grid + 0.5)  # +0.5 for centroid of tiles
+            centroid = annotation_resolution_factor * (
+                grid + 0.5
+            )  # +0.5 for centroid of tiles
             mask_shape = annotation_resolution_factor * np.array([y_max, x_max])
-            
+
             # Round float coordinates to nearest grid idx
             x_idx, y_idx = centroid.T.round().astype(int)
 

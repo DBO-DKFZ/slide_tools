@@ -45,7 +45,7 @@ class TileLevelDataModule(pl.LightningDataModule):
         regions_with_labels: bool = False,
         regions_return_labels: Optional[Union[Sequence[str], str]] = None,
         regions_filter_by_label_func: Optional[Callable] = None,
-        regions_annotation_resolution_factor: float = 1.,
+        regions_annotation_resolution_factor: float = 1.0,
         epoch_balance_size_by: Optional[Union[BalanceMode, int, str]] = None,
         epoch_balance_label_key: Optional[str] = None,
         epoch_balance_label_bins: int = 10,
@@ -226,7 +226,7 @@ class TileLevelDataModule(pl.LightningDataModule):
         batch_size: Optional[int] = None,
         pin_memory: Optional[bool] = None,
     ):
-        self.ds_train.reload()
+        self.ds_train.reload(epoch=self.trainer.current_epoch)
         return DataLoader(
             self.ds_train,
             shuffle=False,

@@ -103,7 +103,9 @@ class TileLevelDataset(Dataset):
             region_overlap=kwargs.get("region_overlap", 0.0),
             with_labels=kwargs.get("with_labels", False),
             filter_by_label_func=kwargs.get("filter_by_label_func"),
-            annotation_resolution_factor=kwargs.get("annotation_resolution_factor", 2.)
+            annotation_resolution_factor=kwargs.get(
+                "annotation_resolution_factor", 2.0
+            ),
         )
 
         # Remove empty slides
@@ -114,7 +116,7 @@ class TileLevelDataset(Dataset):
                 stacklevel=2,
             )
             self.slides.pop(idx)
-        
+
         self.simple_epoch = simple_epoch
         if simple_epoch:
             self.setup_epoch_no_sampling(
@@ -147,7 +149,7 @@ class TileLevelDataset(Dataset):
         region_overlap: float = 0.0,
         with_labels: bool = False,
         filter_by_label_func: Optional[Callable] = None,
-        annotation_resolution_factor: float = 2.,
+        annotation_resolution_factor: float = 2.0,
     ):
         """
         Call .setup_regions(...) for all .slides
@@ -170,7 +172,7 @@ class TileLevelDataset(Dataset):
                 filter_by_label_func=filter_by_label_func,
                 annotation_resolution_factor=annotation_resolution_factor,
             )
-            
+
     def reload(self, epoch=None):
         if self.simple_epoch:
             self.setup_epoch_no_sampling(**self._reload_kwargs, epoch=epoch)
@@ -195,7 +197,7 @@ class TileLevelDataset(Dataset):
         """
         if self.verbose:
             print("Setting up simple epoch")
-            
+
         seed = self.seed + epoch if epoch is not None else None
         rng = np.random.default_rng(seed)
 
@@ -275,7 +277,7 @@ class TileLevelDataset(Dataset):
         """
         if self.verbose:
             print("Setting up epoch")
-            
+
         seed = self.seed + epoch if epoch is not None else None
         rng = np.random.default_rng(seed)
 
@@ -378,9 +380,7 @@ class TileLevelDataset(Dataset):
 
                 # Sprinkle duplicates uniformly into unique
                 samples_sorted = np.empty_like(samples)
-                duplicate_idx = rng.choice(
-                    len(samples), size=len(rest), replace=False
-                )
+                duplicate_idx = rng.choice(len(samples), size=len(rest), replace=False)
                 duplicate_mask = np.zeros(len(samples), dtype=bool)
                 duplicate_mask[duplicate_idx] = True
                 samples_sorted[duplicate_mask] = rest
@@ -400,7 +400,7 @@ class TileLevelDataset(Dataset):
                 rng.shuffle(samples)
 
         self.samples = samples
-        
+
         self._reload_kwargs = {
             "balance_size_by": balance_size_by,
             "balance_label_key": balance_label_key,
