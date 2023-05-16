@@ -103,9 +103,9 @@ class TileLevelDataset(Dataset):
             region_overlap=kwargs.get("region_overlap", 0.0),
             with_labels=kwargs.get("with_labels", False),
             filter_by_label_func=kwargs.get("filter_by_label_func"),
-            annotation_resolution_factor=kwargs.get(
-                "annotation_resolution_factor", 2.0
-            ),
+            annotation_resolution_factor=kwargs.get("annotation_resolution_factor", 1),
+            allow_out_of_bounds=kwargs.get("allow_out_of_bounds", False),
+            annotation_threshold=kwargs.get("annotation_threshold", 0.5),
         )
 
         # Remove empty slides

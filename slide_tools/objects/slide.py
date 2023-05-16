@@ -9,6 +9,7 @@ import numpy as np
 import rasterio
 import xmltodict
 from numpy.typing import ArrayLike
+from rasterio import features
 from scipy import interpolate as scipy_interpolate
 from shapely import geometry as shapely_geometry
 
@@ -290,7 +291,6 @@ class Slide:
             annotation = shapely_geometry.GeometryCollection(
                 [annotation.geometry for annotation in self.annotations]
             )
-            factor = annotation_resolution_factor / region_dims
 
             if annotation_align:
                 # Recalculate grid with annotation in mind
@@ -336,7 +336,7 @@ class Slide:
                 dims["region"]["w"] / annotation_resolution_factor,
                 dims["region"]["h"] / annotation_resolution_factor,
             )
-            mask = rasterio.features.geometry_mask(
+            mask = features.geometry_mask(
                 geometries=[annotation],
                 out_shape=mask_shape,
                 transform=transform,
