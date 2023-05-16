@@ -10,7 +10,6 @@ import rasterio
 import xmltodict
 from numpy.typing import ArrayLike
 from scipy import interpolate as scipy_interpolate
-from shapely import affinity as shapely_affinity
 from shapely import geometry as shapely_geometry
 
 from slide_tools.objects.annotation import Annotation
