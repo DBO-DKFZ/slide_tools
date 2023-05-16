@@ -6,15 +6,20 @@ from typing import Callable, Optional, Sequence, Union
 
 import cucim
 import numpy as np
+import rasterio
 import xmltodict
 from numpy.typing import ArrayLike
-from rasterio.features import rasterize as rio_rasterize
 from scipy import interpolate as scipy_interpolate
 from shapely import affinity as shapely_affinity
 from shapely import geometry as shapely_geometry
 
-from .annotation import Annotation
-from .constants import LabelField, LabelInterpolation, SizeUnit, SlideType
+from slide_tools.objects.annotation import Annotation
+from slide_tools.objects.constants import (
+    LabelField,
+    LabelInterpolation,
+    SizeUnit,
+    SlideType,
+)
 
 __all__ = ["Slide"]
 
@@ -213,7 +218,9 @@ class Slide:
         region_overlap: float = 0.0,
         with_labels: bool = False,
         filter_by_label_func: Optional[Callable] = None,
-        annotation_resolution_factor: float = 2.0,
+        annotation_resolution_factor: int = 1,
+        allow_out_of_bounds: bool = False,
+        annotation_threshold: float = 0.5,
     ):
         """
         Load all suitable regions (and corresponding labels) on the slide.
@@ -230,8 +237,11 @@ class Slide:
             with_labels (bool): whether to load corresponding labels (default: False)
             filter_by_label_func (callable): should convert slide.labels dictionary into mask (`True` == keep) (default: None)
             annotation_resolution_factor (float): internal annotation resolution in units of region resolution (default: 1)
+            allow_out_of_bounds (bool): Whether to include last row & column of regions to cover slide/annotation (default: False)
+            annotation_threshold (float): Used for thresholding average pooled annotation (default: 0.5)
         """
         assert self.is_loaded
+        assert isinstance(annotation_resolution_factor, int)
         self.level = level
 
         # Use native resolution if size is unspecified
@@ -248,10 +258,32 @@ class Slide:
         if unit == SizeUnit.MICRON:
             assert size is not None
             assert self.microns_per_pixel is not None
-            size = [int(s / self.microns_per_pixel) for s in size]
+            if isinstance(size, int) or isinstance(size, float):
+                size = (size, size)
+            size = [np.round(s / self.microns_per_pixel) for s in size]
 
-        size = np.asarray(size)
-        x_min, y_min, x_max, y_max = 0, 0, *(np.array(self.image_shape[1::-1]) / size)
+        region_dims = np.asarray(size).astype(int)
+
+        boundary_func = np.ceil if allow_out_of_bounds else np.floor
+        dims = {
+            "region": {
+                "w": region_dims[0],
+                "h": region_dims[1],
+            },
+            "slide": {
+                "w": self.image_shape[1],
+                "h": self.image_shape[0],
+            },
+            # grid is aligned to slide boundaries
+            "grid": {
+                "x_min": 0,
+                "y_min": 0,
+                "x_max": boundary_func(self.image_shape[1] / region_dims[0]),
+                "y_max": boundary_func(self.image_shape[0] / region_dims[1]),
+                "w": int(boundary_func(self.image_shape[1] / region_dims[0])),
+                "h": int(boundary_func(self.image_shape[0] / region_dims[1])),
+            },
+        }
 
         if centroid_in_annotation:
             assert self.annotations is not None
@@ -259,38 +291,80 @@ class Slide:
             annotation = shapely_geometry.GeometryCollection(
                 [annotation.geometry for annotation in self.annotations]
             )
-            factor = annotation_resolution_factor / size
-            scaled = shapely_affinity.scale(
-                geom=annotation, xfact=factor[0], yfact=factor[1], origin=(0, 0)
-            )
+            factor = annotation_resolution_factor / region_dims
+
             if annotation_align:
-                x_min, y_min, x_max, y_max = scaled.bounds
+                # Recalculate grid with annotation in mind
+                x_min, y_min, x_max, y_max = annotation.bounds
+                x_min, x_max = np.array([x_min, x_max]) / dims["region"]["w"]
+                y_min, y_max = np.array([y_min, y_max]) / dims["region"]["h"]
+                x_bound = dims["slide"]["w"] / dims["region"]["w"]
+                y_bound = dims["slide"]["h"] / dims["region"]["h"]
+                assert (
+                    (x_min >= 0)
+                    and (y_min >= 0)
+                    and (x_max <= x_bound)
+                    and (y_max <= y_bound)
+                )
+                w = int(boundary_func(x_max - x_min))
+                h = int(boundary_func(y_max - y_min))
+
+                dims["grid"] = {
+                    "x_min": x_min,
+                    "x_max": x_min + w,
+                    "y_min": y_min,
+                    "y_max": y_min + h,
+                    "w": w,
+                    "h": h,
+                }
 
         step = 1.0 - region_overlap  # step is in tile coordinates
+        dims["grid"]["step"] = step
+        # Top-Left corner of tiles
         x, y = np.meshgrid(
-            np.arange(x_min, x_max, step),
-            np.arange(y_min, y_max, step),
+            np.arange(dims["grid"]["x_min"], dims["grid"]["x_max"] - 1 + 1e-6, step),
+            np.arange(dims["grid"]["y_min"], dims["grid"]["y_max"] - 1 + 1e-6, step),
         )
         grid = np.stack([x.flatten(), y.flatten()])
         grid = grid.T
 
         if centroid_in_annotation:
-            centroid = annotation_resolution_factor * (
-                grid + 0.5
-            )  # +0.5 for centroid of tiles
-            mask_shape = annotation_resolution_factor * np.array([y_max, x_max])
+            mask_shape = np.array([dims["grid"]["h"], dims["grid"]["w"]])
+            mask_shape = annotation_resolution_factor * mask_shape
+            transform = rasterio.transform.from_origin(
+                dims["grid"]["x_min"] * dims["region"]["w"],
+                dims["grid"]["y_max"] * dims["region"]["h"],
+                dims["region"]["w"] / annotation_resolution_factor,
+                dims["region"]["h"] / annotation_resolution_factor,
+            )
+            mask = rasterio.features.geometry_mask(
+                geometries=[annotation],
+                out_shape=mask_shape,
+                transform=transform,
+                invert=True,
+            )
+            mask = mask[::-1, :]  # mask is always upside down
+            if annotation_resolution_factor > 1:
+                k = annotation_resolution_factor
+                average_pooled = (
+                    mask.reshape(
+                        mask_shape[0] // k,
+                        k,
+                        mask_shape[1] // k,
+                        k,
+                    )
+                    .swapaxes(1, 2)
+                    .mean(axis=(2, 3))
+                )
+                mask = average_pooled >= annotation_threshold
 
-            # Round float coordinates to nearest grid idx
-            x_idx, y_idx = centroid.T.round().astype(int)
-
-            # Create binary mask of tiles overlapping the annotation
-            mask = rio_rasterize(
-                shapes=[scaled], out_shape=(mask_shape + 2).astype(int)
-            ).astype(bool)
+            origin = np.array([dims["grid"]["x_min"], dims["grid"]["y_min"]])
+            centroid = (grid + 0.5) - origin  # +0.5 for centroid of tiles
+            x_idx, y_idx = np.floor(centroid.T).astype(int)
             grid = grid[mask[y_idx, x_idx]]
 
         # Rescale to pixel coordinates
-        regions = (size * grid).round().astype(int)
+        regions = (region_dims * grid).round().astype(int)
 
         labels = None
         if with_labels or (filter_by_label_func is not None):
@@ -304,9 +378,10 @@ class Slide:
                 else:
                     labels = None
 
-        sizes = np.broadcast_to(size, (len(regions), 2))
+        sizes = np.broadcast_to(region_dims, (len(regions), 2))
         self.regions = np.concatenate([regions, sizes], axis=1)
         self.labels = labels
+        self.dims = dims
 
     def read_region(self, *args, **kwargs) -> ArrayLike:
         """Wrap the call to a CuImage to return an array for convenience."""

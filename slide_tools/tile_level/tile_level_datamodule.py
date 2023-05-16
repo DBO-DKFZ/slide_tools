@@ -45,7 +45,9 @@ class TileLevelDataModule(pl.LightningDataModule):
         regions_with_labels: bool = False,
         regions_return_labels: Optional[Union[Sequence[str], str]] = None,
         regions_filter_by_label_func: Optional[Callable] = None,
-        regions_annotation_resolution_factor: float = 1.0,
+        regions_annotation_resolution_factor: int = 1,
+        regions_allow_out_of_bounds: bool = False,
+        regions_annotation_threshold: float = 0.5,
         epoch_balance_size_by: Optional[Union[BalanceMode, int, str]] = None,
         epoch_balance_label_key: Optional[str] = None,
         epoch_balance_label_bins: int = 10,
@@ -88,6 +90,8 @@ class TileLevelDataModule(pl.LightningDataModule):
             regions_return_labels: see `slide_tools.TileLevelDataset.setup_regions()`
             regions_filter_by_label_func: see `slide_tools.TileLevelDataset.setup_regions()`
             regions_annotation_resolution_factor: see `slide_tools.TileLevelDataset.setup_regions()`
+            regions_allow_out_of_bounds: see `slide_tools.TileLevelDataset.setup_regions()`
+            regions_annotation_threshold: see `slide_tools.TileLevelDataset.setup_regions()`
             epoch_balance_size_by: see `slide_tools.TileLevelDataset.setup_epoch()`
             epoch_balance_label_key: see `slide_tools.TileLevelDataset.setup_epoch()`
             epoch_balance_label_bins: see `slide_tools.TileLevelDataset.setup_epoch()`

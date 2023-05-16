@@ -149,7 +149,9 @@ class TileLevelDataset(Dataset):
         region_overlap: float = 0.0,
         with_labels: bool = False,
         filter_by_label_func: Optional[Callable] = None,
-        annotation_resolution_factor: float = 2.0,
+        annotation_resolution_factor: int = 1,
+        allow_out_of_bounds: bool = False,
+        annotation_threshold: float = 0.5,
     ):
         """
         Call .setup_regions(...) for all .slides
@@ -171,6 +173,8 @@ class TileLevelDataset(Dataset):
                 with_labels=with_labels,
                 filter_by_label_func=filter_by_label_func,
                 annotation_resolution_factor=annotation_resolution_factor,
+                allow_out_of_bounds=allow_out_of_bounds,
+                annotation_threshold=annotation_threshold,
             )
 
     def reload(self, epoch=None):

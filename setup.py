@@ -4,7 +4,7 @@ from setuptools import find_packages
 
 setup(
     name="slide_tools",
-    version="0.1.4",
+    version="0.2",
     packages=find_packages(),
     long_description=open("README.md").read(),
     install_requires=[
