@@ -29,6 +29,7 @@ class TileLevelDataset(Dataset):
         location_wiggle: Optional[float] = None,
         simple_epoch: bool = False,
         seed: int = 0,
+        backend: str = "cucim",
         **kwargs,
     ):
         """
@@ -75,7 +76,7 @@ class TileLevelDataset(Dataset):
 
         for i in iterator:
             slide = Slide()
-            slide.load_wsi(slide_paths[i])
+            slide.load_wsi(slide_paths[i], backend=backend)
             if annotation_paths is not None:
                 slide.load_annotations_from_geojson(
                     path=annotation_paths[i],

@@ -36,6 +36,7 @@ class TileLevelDataModule(pl.LightningDataModule):
         slide_interpolation: Union[str, LabelInterpolation] = "nearest",
         slide_load_keys: Optional[Sequence[str]] = None,
         slide_linear_fill_value: float = np.nan,
+        slide_backend: str = "cucim",
         regions_size: Optional[int] = None,
         regions_unit: Union[str, SizeUnit] = "pixel",
         regions_level: int = 0,
@@ -80,6 +81,7 @@ class TileLevelDataModule(pl.LightningDataModule):
             slide_interpolation: see `slide_tools.Slide`
             slide_load_keys: see `slide_tools.Slide`
             slide_linear_fill_value: see `slide_tools.Slide`
+            slide_backend: : see `slide_tools.Slide`
             regions_size: see `slide_tools.TileLevelDataset.setup_regions()`
             regions_unit: see `slide_tools.TileLevelDataset.setup_regions()`
             regions_level: see `slide_tools.TileLevelDataset.setup_regions()`
