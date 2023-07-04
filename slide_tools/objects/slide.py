@@ -1,3 +1,4 @@
+import os
 import json
 import random
 from dataclasses import dataclass
@@ -5,6 +6,7 @@ from functools import partial
 from typing import Callable, Optional, Sequence, Union
 
 import cucim
+import openslide
 import numpy as np
 import rasterio
 import xmltodict
@@ -31,7 +33,7 @@ class Slide:
 
     Attributes:
         annotations (Annotation): Annotation object with geometry and properties
-        image (CuImage): a single loaded WSI
+        image (CuImage, OpenSlide): a single loaded WSI
         label_func (callable): function that maps coordinates to labels: (x, y) -> label
         properties (dict): any properties concerning the slide
         microns_per_pixel (float): native/highest WSI resolution
@@ -41,7 +43,7 @@ class Slide:
     """
 
     annotations: Optional[Sequence[Annotation]] = None
-    image: Optional[cucim.CuImage] = None
+    image: Optional[Union[cucim.CuImage, openslide.OpenSlide] = None
     local_label_func: Optional[Callable] = None
     global_label_func: Optional[Callable] = None
     properties: Optional[dict] = None
@@ -58,6 +60,8 @@ class Slide:
             path (str): path
             simplify_tolerance (int): simplify annotation shape (see `shapely.geometry.simplify`) (default: 0)
         """
+        assert os.path.exists(path), f"{path} does not exist"
+        
         with open(path) as stream:
             dictionary = json.load(stream)
             assert dictionary["type"] == "FeatureCollection"
@@ -74,25 +78,48 @@ class Slide:
         if len(self.annotations) == 0:
             raise RuntimeError(f"No annotation found in: {path}")
 
-    def load_wsi(self, path: str, raise_resolution: bool = True):
+    def load_wsi(
+        self,
+        path: str,
+        raise_resolution: bool = True,
+        backend: str = "cucim"):
         """
-        Load WSI with cuCIM and populate slide.image.
+        Load WSI with cuCIM or openslide and populate slide.image.
 
         Args:
             path (str): path
             raise_resolution (bool): Raise error on unknown pixel resolution (default: True)
+            backend (str): 'cucim' or 'openslide' (default: 'cucim')
 
         Supports population of slide.microns_per_pixel for SlideType.{APERIO, TIFF}.
         """
-        self.image = cucim.CuImage(path)
-        self.image_shape = self.image.shape
-        self.native_sizes = (
-            np.array(self.image.resolutions["level_tile_sizes"])
-            * np.array(self.image.resolutions["level_downsamples"], dtype=int)[
-                ..., None
-            ]
-        )
+        
+        assert os.path.exists(path), f"{path} does not exist"
+        
+        self.backend = backend.lower()
+        assert self.backend in ("cucim", "openslide"), "Backend must be 'cucim' or 'openslide'"
+        
+        self.image_path = path
+        if self.backend == "cucim":
+            self._load_cucim(path)
+
+        elif self.backend == "openslide":
+            self._load_openslide(path)
+            
         self.is_loaded = True
+
+        if self.microns_per_pixel is None and raise_resolution:
+            raise NotImplementedError(
+                "Unknown WSI: Please add a way to extract microns_per_pixel for your WSI!"
+            )
+            
+    def _load_cucim(self, path: str):
+        self.loader = cucim.CuImage
+        self.image = self.loader(path)
+        self.image_shape = self.image.shape
+        self.level_tile_sizes = np.array(self.image.resolutions["level_tile_sizes"])
+        self.level_downsamples = np.array(self.image.resolutions["level_downsamples"], dtype=int)
+        self.native_sizes = self.level_tile_sizes * self.level_downsamples[..., None]
 
         if SlideType.APERIO.value in self.image.metadata:
             self.microns_per_pixel = float(self.image.metadata["aperio"]["MPP"])
@@ -112,16 +139,39 @@ class Slide:
                     raise RuntimeError(
                         f"Could not extract microns_per_pixel from:\n{props}"
                     )
+                    
+    def _load_openslide(self, path: str):
+        self.loader = openslide.open_slide
+        self.image = self.loader(path)
+        self.image_shape = [*self.image.dimensions[::-1], 3]  # openslide does not provide channel number
+        
+        self.level_tile_sizes = np.array([
+            [
+                self.image.properties[f"openslide.level[{l}].tile-width"],
+                self.image.properties[f"openslide.level[{l}].tile-height"]
+            ]
+            for l in range(self.image.level_count)
+        ], dtype=int)
 
-        if self.microns_per_pixel is None and raise_resolution:
-            raise NotImplementedError(
-                "Unknown WSI: Please add a way to extract microns_per_pixel for your WSI!"
-            )
+        self.level_downsamples = np.array(self.image.level_downsamples, dtype=int)
+        self.native_sizes = self.level_tile_sizes * self.level_downsamples[..., None]
+
+        mpp_x = float(self.image.properties[openslide.PROPERTY_NAME_MPP_X])
+        mpp_y = float(self.image.properties[openslide.PROPERTY_NAME_MPP_X])
+        assert mpp_x == mpp_y, f"Unequal resolutions {mpp_x=} != {mpp_y=}"
+        assert (mpp_x is not None) and (mpp_x > 0), f"Unrecognized resolution {mpp_x=}"
+        self.microns_per_pixel = mpp_x
+        
 
     def unload_wsi(self):
         if self.is_loaded:
-            self.image = self.image.path
+            self.image = None
             self.is_loaded = False
+            
+    def reload_wsi(self):
+        if not self.is_loaded:
+            self.image = self.loader(self.image_path)
+            self.is_loaded = True
 
     def set_global_label(self, labels: dict):
         """
@@ -157,6 +207,8 @@ class Slide:
             centroid_in_annotation (bool): whether region centroids have to overlap with the annotation (default: False)
             linear_fill_value (float): fill value for linear interpolation outside of convex hull (default: np.nan)
         """
+        assert os.path.exists(path), f"{path} does not exist"
+        
         if interpolation == LabelInterpolation.NEAREST:
             func = scipy_interpolate.NearestNDInterpolator
         elif interpolation == LabelInterpolation.LINEAR:
@@ -385,6 +437,6 @@ class Slide:
     def read_region(self, *args, **kwargs) -> ArrayLike:
         """Wrap the call to a CuImage to return an array for convenience."""
         if not self.is_loaded:
-            self.image = cucim.CuImage(self.image)
+            self.image = self.image_loader(self.image_path)
             self.is_loaded = True
-        return np.asarray(self.image.read_region(*args, **kwargs, level=self.level))
+        return np.asarray(self.image.read_region(*args, **kwargs, level=self.level))[..., :3]
