@@ -427,7 +427,7 @@ class Slide:
 
         labels = None
         if with_labels or (filter_by_label_func is not None):
-            x, y = (regions + size / 2).T
+            x, y = (regions + region_dims / 2).T
             labels = self.get_labels(x, y)
             if filter_by_label_func is not None:
                 filter_mask = filter_by_label_func(labels)
