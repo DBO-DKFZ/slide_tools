@@ -18,5 +18,6 @@ setup(
         "torch",
         "tqdm",
         "xmltodict",
+        "openslide-python",
     ],
 )
