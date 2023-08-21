@@ -6,7 +6,7 @@ from typing import Callable, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
-import pytorch_lightning as pl
+import lightning as L
 from torch.nn import Identity
 from torch.utils.data import DataLoader
 
@@ -16,7 +16,7 @@ from .tile_level_dataset import TileLevelDataset
 __all__ = ["TileLevelDataModule"]
 
 
-class TileLevelDataModule(pl.LightningDataModule):
+class TileLevelDataModule(L.LightningDataModule):
     def __init__(
         self,
         root: str = None,
@@ -111,7 +111,7 @@ class TileLevelDataModule(pl.LightningDataModule):
             test_dataloader: Create dataloader from csv_train given all other arguments
             add_argparse_args: Add all arguments to a parser
 
-        Note: You want to set reload_dataloaders_every_n_epochs=1 in your `pl.Trainer`.
+        Note: You want to set reload_dataloaders_every_n_epochs=1 in your `L.Trainer`.
               This datamodule works with DistributedDataParallel out of the box.
         """
         super().__init__()
@@ -130,7 +130,7 @@ class TileLevelDataModule(pl.LightningDataModule):
 
         # Helper to split off hparams beginning with prefix
         def split_off_by(prefix, hparams):
-            return pl.utilities.parsing.AttributeDict(
+            return L.utilities.parsing.AttributeDict(
                 {
                     key[len(prefix) :]: hparams[key]
                     for key in hparams
@@ -280,4 +280,4 @@ class TileLevelDataModule(pl.LightningDataModule):
         parser.add_argument(
             "--regions_return_labels", nargs="+", type=str, default=None
         )
-        return pl.utilities.argparse.add_argparse_args(cls, parser, **kwargs)
+        return L.utilities.argparse.add_argparse_args(cls, parser, **kwargs)
