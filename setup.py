@@ -11,7 +11,7 @@ setup(
         "cucim",
         "numpy",
         "pandas",
-        "pytorch_lightning",
+        "lightning",
         "rasterio",
         "scipy",
         "shapely",
