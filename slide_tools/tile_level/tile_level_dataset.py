@@ -1,16 +1,63 @@
+import inspect
 import random
 import warnings
-from functools import partial
+import functools
 from typing import Callable, Optional, Sequence, Union
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+import torch.distributed as dist
 from tqdm import tqdm
 
 from ..objects import BalanceMode, LabelInterpolation, SizeUnit, Slide
+from ..serialize import TorchShmSerializedList
+from .. import comm
 
 __all__ = ["TileLevelDataset"]
+
+
+def share_from_rank_zero(
+    share_attrs,
+    share_memory=False,
+    world_size=1,
+    is_rank_zero=True,
+):
+    def decorator(func):
+        def get_params(self):
+            if hasattr(self, "share_memory"):
+                return self.share_memory, self.world_size, self.is_rank_zero
+            else:
+                return share_memory, world_size, is_rank_zero
+        
+        @functools.wraps(func)
+        def share_func(*args, **kwargs):
+            if inspect.ismethod(func):
+                self = func.__self__
+            else:
+                self = args[0]
+
+            share_memory, world_size, is_rank_zero = get_params(self)
+                
+            if not share_memory or world_size < 2:
+                return func(*args, **kwargs)
+            out = None
+            if is_rank_zero:
+                out = func(*args, **kwargs)
+            dist.barrier()
+            
+            for attr in share_attrs:
+                value = []
+                if is_rank_zero:
+                    value = getattr(self, attr)
+                    if value is None:
+                        value = [0]
+                setattr(self, attr, TorchShmSerializedList(value))
+            dist.barrier()
+            print(f"Shared {share_attrs}")
+            return out
+        return share_func
+    return decorator
 
 
 class TileLevelDataset(Dataset):
@@ -30,6 +77,7 @@ class TileLevelDataset(Dataset):
         simple_epoch: bool = False,
         seed: int = 0,
         backend: str = "cucim",
+        share_memory: bool = False,
         **kwargs,
     ):
         """
@@ -67,7 +115,16 @@ class TileLevelDataset(Dataset):
         self.return_index = return_index
         self.location_wiggle = location_wiggle
         self.seed = 0
-
+        self.share_memory = share_memory
+        if self.share_memory:
+            self.rank = comm.get_local_rank()
+            self.is_rank_zero = comm.is_main_process()
+            self.world_size = comm.get_world_size()
+        else:
+            self.rank = 0
+            self.is_rank_zero = True
+            self.world_size = 1
+        
         self.slides = []
 
         iterator = range(len(slide_paths))
@@ -139,7 +196,7 @@ class TileLevelDataset(Dataset):
 
         if lazy_loading:
             self.unload_wsi()
-
+            
     def setup_regions(
         self,
         size: Optional[Sequence[int]] = None,
@@ -164,7 +221,12 @@ class TileLevelDataset(Dataset):
             iterator = tqdm(iterator, desc="Setup Regions")
 
         for slide in iterator:
-            slide.setup_regions(
+            share_from_rank_zero(
+                ["regions"],
+                share_memory=self.share_memory,
+                world_size=self.world_size,
+                is_rank_zero=self.is_rank_zero,
+            )(slide.setup_regions)(
                 size=size,
                 unit=unit,
                 level=level,
@@ -177,13 +239,16 @@ class TileLevelDataset(Dataset):
                 allow_out_of_bounds=allow_out_of_bounds,
                 annotation_threshold=annotation_threshold,
             )
+            slide.level = level
 
     def reload(self, epoch=None):
+        kwargs = getattr(self, "_reload_kwargs", {})
         if self.simple_epoch:
-            self.setup_epoch_no_sampling(**self._reload_kwargs, epoch=epoch)
+            self.setup_epoch_no_sampling(**kwargs, epoch=epoch)
         else:
-            self.setup_epoch_with_sampling(**self._reload_kwargs, epoch=epoch)
+            self.setup_epoch_with_sampling(**kwargs, epoch=epoch)
 
+    @share_from_rank_zero(["samples"])
     def setup_epoch_no_sampling(
         self,
         balance_strict_size_by: Optional[Union[BalanceMode, int]] = None,
@@ -243,7 +308,7 @@ class TileLevelDataset(Dataset):
 
         if shuffle:
             rng.shuffle(samples)
-
+            
         self.samples = samples
 
         self._reload_kwargs = {
@@ -251,6 +316,7 @@ class TileLevelDataset(Dataset):
             "shuffle": shuffle,
         }
 
+    @share_from_rank_zero("samples")
     def setup_epoch_with_sampling(
         self,
         balance_size_by: Optional[Union[BalanceMode, int]] = None,
