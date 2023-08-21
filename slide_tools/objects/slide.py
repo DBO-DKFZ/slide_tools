@@ -1,3 +1,6 @@
+# Importing this first will prevent a numpy warning related to subnormals
+from scipy import interpolate as scipy_interpolate
+
 import json
 import os
 import random
@@ -12,7 +15,7 @@ import rasterio
 import xmltodict
 from numpy.typing import ArrayLike
 from rasterio import features
-from scipy import interpolate as scipy_interpolate
+
 from shapely import geometry as shapely_geometry
 
 from slide_tools.objects.annotation import Annotation
